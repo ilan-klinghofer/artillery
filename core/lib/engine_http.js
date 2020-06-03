@@ -462,35 +462,61 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
           });
         }
 
-        request(requestParams, maybeCallback)
-          .on('request', function (req) {
-            debugRequests('request start: %s', req.path);
-            ee.emit('request');
 
-            const startedAt = process.hrtime();
-
-            req.on('response', function updateLatency(res) {
-              let code = res.statusCode;
-              const endedAt = process.hrtime(startedAt);
-              let delta = (endedAt[0] * 1e9) + endedAt[1];
-              debugRequests('request end: %s', req.path);
-              ee.emit('response', delta, code, context._uid);
+        // Now run afterTemplateVarsSubstitution processors
+        let functionNames = _.concat(opts.afterTemplateVarsSubstitution || [], params.afterTemplateVarsSubstitution || []);
+        async.eachSeries(
+          functionNames,
+          function iteratee(functionName, next) {
+            let fn = template(functionName, context);
+            let processFunc = config.processor[fn];
+            if (!processFunc) {
+              processFunc = function (r, c, e, cb) { return cb(null); };
+              console.warn(`WARNING: custom function ${fn} could not be found`); // TODO: a 'warning' event
+            }
+            processFunc(requestParams, context, ee, function (err) {
+              if (err) {
+                return next(err);
+              }
+              return next(null);
             });
-          }).on('end', function () {
-            context._successCount++;
-
-            if (!maybeCallback) {
-              callback(null, context);
-            } // otherwise called from requestCallback
-          }).on('error', function (err) {
-            debug(err);
-
-            // Run onError hooks and end the scenario
-            runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
-              let errCode = err.code || err.message;
-              ee.emit('error', errCode);
+          }, function (err) {
+            if (err) {
+              debug(err);
+              ee.emit('error', err.code || err.message);
               return callback(err, context);
-            });
+            }
+
+            request(requestParams, maybeCallback)
+              .on('request', function (req) {
+                debugRequests('request start: %s', req.path);
+                ee.emit('request');
+
+                const startedAt = process.hrtime();
+
+                req.on('response', function updateLatency(res) {
+                  let code = res.statusCode;
+                  const endedAt = process.hrtime(startedAt);
+                  let delta = (endedAt[0] * 1e9) + endedAt[1];
+                  debugRequests('request end: %s', req.path);
+                  ee.emit('response', delta, code, context._uid);
+                });
+              }).on('end', function () {
+                context._successCount++;
+
+                if (!maybeCallback) {
+                  callback(null, context);
+                } // otherwise called from requestCallback
+              }).on('error', function (err) {
+                debug(err);
+
+                // Run onError hooks and end the scenario
+                runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
+                  let errCode = err.code || err.message;
+                  ee.emit('error', errCode);
+                  return callback(err, context);
+                });
+              });
           });
       }); // eachSeries
   };
