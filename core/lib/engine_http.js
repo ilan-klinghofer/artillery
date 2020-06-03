@@ -522,31 +522,56 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         requestParams.retry = 0; // disable retries - ignored when using streams
         const startedAt = process.hrtime(); // TODO: use built-in timing API
 
-        request(requestParams)
-          .on('request', function (req) {
-            debugRequests('request start: %s', req.path);
-            ee.emit('counter', 'engine.http.requests', 1);
-            ee.emit('rate', 'engine.http.request_rate');
-            req.on('response', function (res) {
-              self._handleResponse(requestParams.url, res, ee, context, maybeCallback, startedAt, callback);
-            });
-          }).on('error', function (err, body, res) {
-            if (err.name === 'HTTPError') {
-              return;
+        // Now run afterTemplateVarsSubstitution processors
+        let functionNames = _.concat(opts.afterTemplateVarsSubstitution || [], params.afterTemplateVarsSubstitution || []);
+        async.eachSeries(
+          functionNames,
+          function iteratee(functionName, next) {
+            let fn = template(functionName, context);
+            let processFunc = config.processor[fn];
+            if (!processFunc) {
+              processFunc = function (r, c, e, cb) { return cb(null); };
+              console.warn(`WARNING: custom function ${fn} could not be found`); // TODO: a 'warning' event
             }
-            // this is an ENOTFOUND, ECONNRESET etc
-            debug(err);
-            // Run onError hooks and end the scenario:
-            runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
-              let errCode = err.code || err.message;
-              ee.emit('error', errCode);
-              return callback(err, context);
+            processFunc(requestParams, context, ee, function (err) {
+              if (err) {
+                return next(err);
+              }
+              return next(null);
             });
-          })
-          .catch((gotErr) => {
-            // TODO: Handle the error properly with run hooks
-            ee.emit('error', gotErr.code || gotErr.message);
-            return callback(gotErr, context);
+          }, function (err) {
+            if (err) {
+              debug(err);
+              ee.emit('error', err.code || err.message);
+              return callback(err, context);
+            }
+
+            request(requestParams)
+              .on('request', function (req) {
+                debugRequests('request start: %s', req.path);
+                ee.emit('counter', 'engine.http.requests', 1);
+                ee.emit('rate', 'engine.http.request_rate');
+                req.on('response', function (res) {
+                  self._handleResponse(requestParams.url, res, ee, context, maybeCallback, startedAt, callback);
+                });
+              }).on('error', function (err, body, res) {
+                if (err.name === 'HTTPError') {
+                  return;
+                }
+                // this is an ENOTFOUND, ECONNRESET etc
+                debug(err);
+                // Run onError hooks and end the scenario:
+                runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
+                  let errCode = err.code || err.message;
+                  ee.emit('error', errCode);
+                  return callback(err, context);
+                });
+              })
+              .catch((gotErr) => {
+                // TODO: Handle the error properly with run hooks
+                ee.emit('error', gotErr.code || gotErr.message);
+                return callback(gotErr, context);
+              });
           });
       }); // eachSeries
   };
