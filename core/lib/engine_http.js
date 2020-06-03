@@ -47,7 +47,7 @@ function HttpEngine(script) {
   this._httpsAgent = new https.Agent(agentOpts);
 }
 
-HttpEngine.prototype.createScenario = function(scenarioSpec, ee) {
+HttpEngine.prototype.createScenario = function (scenarioSpec, ee) {
   var self = this;
 
   // Helper function to wrap an object's property in a list if it's
@@ -72,13 +72,13 @@ HttpEngine.prototype.createScenario = function(scenarioSpec, ee) {
   // entire scenario spec rather than just the userContext.
   const beforeScenarioFns = _.map(
     scenarioSpec.beforeScenario,
-    function(hookFunctionName) {
-      return {'function': hookFunctionName};
+    function (hookFunctionName) {
+      return { 'function': hookFunctionName };
     });
   const afterScenarioFns = _.map(
     scenarioSpec.afterScenario,
-    function(hookFunctionName) {
-      return {'function': hookFunctionName};
+    function (hookFunctionName) {
+      return { 'function': hookFunctionName };
     });
 
   const newFlow = beforeScenarioFns.concat(
@@ -86,7 +86,7 @@ HttpEngine.prototype.createScenario = function(scenarioSpec, ee) {
 
   scenarioSpec.flow = newFlow;
 
-  let tasks = _.map(scenarioSpec.flow, function(rs) {
+  let tasks = _.map(scenarioSpec.flow, function (rs) {
     return self.step(rs, ee, {
       beforeRequest: scenarioSpec.beforeRequest,
       afterResponse: scenarioSpec.afterResponse,
@@ -104,7 +104,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
   let config = this.config;
 
   if (requestSpec.loop) {
-    let steps = _.map(requestSpec.loop, function(rs) {
+    let steps = _.map(requestSpec.loop, function (rs) {
       return self.step(rs, ee, opts);
     });
 
@@ -121,16 +121,16 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
   }
 
   if (requestSpec.parallel) {
-    let steps = _.map(requestSpec.parallel, function(rs) {
-        return self.step(rs, ee, opts);
+    let steps = _.map(requestSpec.parallel, function (rs) {
+      return self.step(rs, ee, opts);
     });
 
     return engineUtil.createParallel(
-        steps,
-        {
-          limitValue: requestSpec.limit
-        }
-      );
+      steps,
+      {
+        limitValue: requestSpec.limit
+      }
+    );
   }
 
   if (requestSpec.think) {
@@ -138,17 +138,17 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
   }
 
   if (requestSpec.log) {
-    return function(context, callback) {
+    return function (context, callback) {
       console.log(template(requestSpec.log, context));
-      return process.nextTick(function() { callback(null, context); });
+      return process.nextTick(function () { callback(null, context); });
     };
   }
 
   if (requestSpec.function) {
-    return function(context, callback) {
+    return function (context, callback) {
       let processFunc = self.config.processor[requestSpec.function];
       if (processFunc) {
-        return processFunc(context, ee, function(hookErr) {
+        return processFunc(context, ee, function (hookErr) {
           if (hookErr) {
             ee.emit('error', hookErr.code || hookErr.message);
           }
@@ -160,7 +160,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
     };
   }
 
-  let f = function(context, callback) {
+  let f = function (context, callback) {
     let method = _.keys(requestSpec)[0].toUpperCase();
     let params = requestSpec[method.toLowerCase()];
 
@@ -180,7 +180,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
     let timeout = config.timeout || _.get(config, 'http.timeout') || 120;
 
     if (!engineUtil.isProbableEnough(params)) {
-      return process.nextTick(function() {
+      return process.nextTick(function () {
         callback(null, context);
       });
     }
@@ -189,7 +189,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
       let cond;
       let result;
       try {
-        cond = _.has(config.processor, params.ifTrue) ?  config.processor[params.ifTrue]  : filtrex(params.ifTrue);
+        cond = _.has(config.processor, params.ifTrue) ? config.processor[params.ifTrue] : filtrex(params.ifTrue);
         result = cond(context.vars);
       } catch (e) {
         result = 1; // if the expression is incorrect, just proceed // TODO: debug message
@@ -220,7 +220,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
       function iteratee(functionName, next) {
 
         let processFunc = config.processor[functionName];
-        processFunc(requestParams, context, ee, function(err) {
+        processFunc(requestParams, context, ee, function (err) {
           if (err) {
             return next(err);
           }
@@ -274,20 +274,20 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         if (params.formData) {
           requestParams.formData = _.reduce(
             requestParams.formData,
-            function(acc, v, k) {
+            function (acc, v, k) {
               acc[k] = template(v, context);
               return acc;
             },
-          {});
+            {});
         }
 
 
         // Assign default headers then overwrite as needed
         let defaultHeaders = lowcaseKeys(
           (config.defaults && config.defaults.headers) ?
-            config.defaults.headers : {'user-agent': USER_AGENT});
+            config.defaults.headers : { 'user-agent': USER_AGENT });
         const combinedHeaders = _.extend(defaultHeaders, lowcaseKeys(params.headers), lowcaseKeys(requestParams.headers));
-        const templatedHeaders = _.mapValues(combinedHeaders, function(v, k, obj) {
+        const templatedHeaders = _.mapValues(combinedHeaders, function (v, k, obj) {
           return template(v, context);
         });
         requestParams.headers = templatedHeaders;
@@ -296,14 +296,14 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
 
         let cookie = _.reduce(
           params.cookie,
-          function(acc, v, k) {
+          function (acc, v, k) {
             acc[k] = v;
             return acc;
           },
           defaultCookie);
 
         if (cookie) {
-          _.each(cookie, function(v, k) {
+          _.each(cookie, function (v, k) {
             context._jar.setCookie(k + '=' + template(v, context), requestParams.url);
           });
         }
@@ -356,7 +356,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
                   if (requestParams.body.length > 512) {
                     requestInfo.body += ' ...';
                   }
-                } else if (typeof requestParams.body === 'object')  {
+                } else if (typeof requestParams.body === 'object') {
                   requestInfo.body = `< ${requestParams.body.constructor.name} >`;
                 } else {
                   requestInfo.body = String(requestInfo.body);
@@ -376,7 +376,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
             function captured(err, result) {
               if (err) {
                 // Run onError hooks and end the scenario:
-                runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function(asyncErr) {
+                runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
                   ee.emit('error', err.message);
                   return callback(err, context);
                 });
@@ -387,18 +387,18 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
               debug(result.captures);
 
               // match and capture are strict by default:
-              let haveFailedMatches = _.some(result.matches, function(v, k) {
+              let haveFailedMatches = _.some(result.matches, function (v, k) {
                 return !v.success && v.strict !== false;
               });
 
-              let haveFailedCaptures = _.some(result.captures, function(v, k) {
+              let haveFailedCaptures = _.some(result.captures, function (v, k) {
                 return v === '';
               });
 
               if (haveFailedMatches || haveFailedCaptures) {
                 // TODO: Emit the details of each failed capture/match
               } else {
-                _.each(result.matches, function(v, k) {
+                _.each(result.matches, function (v, k) {
                   ee.emit('match', v.success, {
                     expected: v.expected,
                     got: v.got,
@@ -407,7 +407,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
                   });
                 });
 
-                _.each(result.captures, function(v, k) {
+                _.each(result.captures, function (v, k) {
                   _.set(context.vars, k, v);
                 });
               }
@@ -418,13 +418,13 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
                 functionNames,
                 function iteratee(functionName, next) {
                   let processFunc = config.processor[functionName];
-                  processFunc(requestParams, res, context, ee, function(err) {
+                  processFunc(requestParams, res, context, ee, function (err) {
                     if (err) {
                       return next(err);
                     }
                     return next(null);
                   });
-                }, function(err) {
+                }, function (err) {
                   if (err) {
                     debug(err);
                     ee.emit('error', err.code || err.message);
@@ -445,25 +445,25 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         // callback:
         let maybeCallback;
         if (typeof requestParams.capture === 'object' ||
-            typeof requestParams.match === 'object' ||
-            requestParams.afterResponse ||
-            (typeof opts.afterResponse === 'object' && opts.afterResponse.length > 0) ||
-            process.env.DEBUG) {
+          typeof requestParams.match === 'object' ||
+          requestParams.afterResponse ||
+          (typeof opts.afterResponse === 'object' && opts.afterResponse.length > 0) ||
+          process.env.DEBUG) {
           maybeCallback = requestCallback;
         }
 
-        if(!requestParams.url) {
+        if (!requestParams.url) {
           let err = new Error('an URL must be specified');
 
           // Run onError hooks and end the scenario
-          runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function(asyncErr) {
+          runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
             ee.emit('error', err.message);
             return callback(err, context);
           });
         }
 
         request(requestParams, maybeCallback)
-          .on('request', function(req) {
+          .on('request', function (req) {
             debugRequests('request start: %s', req.path);
             ee.emit('request');
 
@@ -476,17 +476,17 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
               debugRequests('request end: %s', req.path);
               ee.emit('response', delta, code, context._uid);
             });
-          }).on('end', function() {
+          }).on('end', function () {
             context._successCount++;
 
             if (!maybeCallback) {
               callback(null, context);
             } // otherwise called from requestCallback
-          }).on('error', function(err) {
+          }).on('error', function (err) {
             debug(err);
 
             // Run onError hooks and end the scenario
-            runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function(asyncErr) {
+            runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function (asyncErr) {
               let errCode = err.code || err.message;
               ee.emit('error', errCode);
               return callback(err, context);
@@ -553,7 +553,7 @@ function maybePrependBase(uri, config) {
  * Given a dictionary, return a dictionary with all keys lowercased.
  */
 function lowcaseKeys(h) {
-  return _.transform(h, function(result, v, k) {
+  return _.transform(h, function (result, v, k) {
     result[k.toLowerCase()] = v;
   });
 }
@@ -561,7 +561,7 @@ function lowcaseKeys(h) {
 function runOnErrorHooks(functionNames, functions, err, requestParams, context, ee, callback) {
   async.eachSeries(functionNames, function iteratee(functionName, next) {
     let processFunc = functions[functionName];
-    processFunc(err, requestParams, context, ee, function(asyncErr) {
+    processFunc(err, requestParams, context, ee, function (asyncErr) {
       if (asyncErr) {
         return next(asyncErr);
       }
